@@ -52,6 +52,8 @@ nexus/
 │   ├── 06-infidelity-discovery.md        ← 完整对话 + 交付物
 │   ├── 11-marital-cold-war.md            ← 完整对话 + 交付物
 │   └── ... (13 个场景骨架，渐进补充)
+├── hooks/
+│   └── nexus-detector.py         # 关键词预检 Hook — 确定性自动激活
 ├── scripts/
 │   └── desensitize.py            # 零依赖脱敏工具
 └── tests/                        # v1.2 预留
@@ -88,6 +90,40 @@ cp -r nexus/ <workspace>/skills/
 ```bash
 cp -r nexus/ .opencode/skills/
 ```
+
+### Hook 自动激活（推荐）
+
+上述安装依赖模型扫描 skill 描述来匹配触发——当 skill 列表较长时，`nexus` 名字不自解释，可能被漏掉。**UserPromptSubmit Hook** 提供确定性触发：每次用户输入时进行关键词预检，命中即注入激活指令，不依赖模型判断。
+
+```bash
+# 1. 复制 hook 脚本到 Claude Code hooks 目录
+cp hooks/nexus-detector.py ~/.claude/hooks/
+```
+
+**2. 在 `~/.claude/settings.json` 中添加 hooks 配置：**
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ~/.claude/hooks/nexus-detector.py",
+            "timeout": 10,
+            "statusMessage": "检测情感关键词..."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**原理**：UserPromptSubmit 在模型处理链之前触发，对用户输入做纯字符串关键词匹配（~10ms）。命中 50+ 两性关系关键词（分手/复合/挽回/失恋/冷战/出轨等），则通过 `additionalContext` 注入激活指令——模型不需要从技能列表中"认出" nexus，指令直接告诉它加载。
+
+关键词分三级：**强信号**（28 个，命中即触发）、**中信号**（23 个，需通过排除检查）、**弱信号**（8 个，仅追加不独立触发）。**排除词**（17 个）防止"和朋友吵架""孩子冷战"等非两性场景误触发。详见 [hooks/nexus-detector.py](hooks/nexus-detector.py)。
 
 ---
 
